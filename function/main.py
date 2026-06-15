@@ -25,21 +25,10 @@ def tg_post(method, payload):
 
 
 def send_photos_to_chat(photos_b64: list, caption: str):
-    """Отправляет фото в Telegram группу пачками по 10."""
+    """Отправляет фото в Telegram группу по одному."""
     BATCH = 10
     for i in range(0, len(photos_b64), BATCH):
         batch = photos_b64[i:i + BATCH]
-        media = []
-        for j, b64 in enumerate(batch):
-            # Убираем data:image/jpeg;base64, если есть
-            if "," in b64:
-                b64 = b64.split(",", 1)[1]
-            media.append({
-                "type": "photo",
-                "media": f"data:image/jpeg;base64,{b64}",
-                "caption": caption if j == 0 and i == 0 else "",
-            })
-        # sendMediaGroup не принимает base64 напрямую — шлём по одному через sendPhoto
         for j, b64 in enumerate(batch):
             if "," in b64:
                 b64 = b64.split(",", 1)[1]
@@ -72,7 +61,8 @@ def handler(event, context):
 
     # Проверка секретного токена
     headers = event.get("headers", {}) or {}
-    token = headers.get("X-Secret-Token", "")
+    # Yandex Cloud передаёт заголовки в нижнем регистре
+    token = headers.get("x-secret-token", "") or headers.get("X-Secret-Token", "")
     if SECRET_TOKEN and token != SECRET_TOKEN:
         return {
             "statusCode": 403,
