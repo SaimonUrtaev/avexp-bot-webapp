@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Новая заявка НЭ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-text-color, #222);
+      padding: 16px;
+      padding-bottom: 80px;
+    }
+
+    h1 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--tg-theme-text-color, #222);
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color, #888);
+      margin-bottom: 4px;
+    }
+
+    input[type="text"], input[type="date"], textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--tg-theme-hint-color, #ddd);
+      border-radius: 10px;
+      font-size: 15px;
+      background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+      color: var(--tg-theme-text-color, #222);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="text"]:focus, input[type="date"]:focus, textarea:focus {
+      border-color: var(--tg-theme-button-color, #2481cc);
+    }
+
+    textarea {
+      min-height: 70px;
+      resize: none;
+    }
+
+    /* Фото */
+    .photo-section {
+      margin-bottom: 14px;
+    }
+
+    .photo-label {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color, #888);
+      margin-bottom: 8px;
+    }
+
+    .photo-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .photo-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      object-fit: cover;
+      position: relative;
+    }
+
+    .photo-item {
+      position: relative;
+      width: 72px;
+      height: 72px;
+    }
+
+    .photo-item img {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    .photo-item .remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #e53935;
+      color: #fff;
+      border: none;
+      font-size: 14px;
+      line-height: 20px;
+      text-align: center;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .add-photo-btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      border: 2px dashed var(--tg-theme-hint-color, #bbb);
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: var(--tg-theme-hint-color, #bbb);
+      cursor: pointer;
+    }
+
+    .photo-count {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #888);
+      margin-top: 6px;
+    }
+
+    /* Кнопка */
+    .submit-btn {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 14px 16px;
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+    }
+
+    /* Сообщения */
+    .msg {
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .msg.error { background: #fdecea; color: #c62828; }
+    .msg.success { background: #e8f5e9; color: #2e7d32; }
+
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>🔍 Новая заявка НЭ</h1>
+
+<div id="msg-error" class="msg error"></div>
+<div id="msg-success" class="msg success"></div>
+
+<div class="field">
+  <label>Клиент *</label>
+  <input type="text" id="client" placeholder="Название парка / клиента" />
+</div>
+
+<div class="field">
+  <label>ФИО клиента *</label>
+  <input type="text" id="fio" placeholder="Иванов Иван Иванович" />
+</div>
+
+<div class="field">
+  <label>Марка ТС *</label>
+  <input type="text" id="car" placeholder="Toyota Camry" />
+</div>
+
+<div class="field">
+  <label>Гос. номер *</label>
+  <input type="text" id="plate" placeholder="А000АА797" />
+</div>
+
+<div class="field">
+  <label>Дата ДТП *</label>
+  <input type="date" id="date" />
+</div>
+
+<div class="field">
+  <label>Комментарий</label>
+  <textarea id="comment" placeholder="Необязательно..."></textarea>
+</div>
+
+<div class="photo-section">
+  <div class="photo-label">📷 Фото (до 30)</div>
+  <div class="photo-grid" id="photo-grid">
+    <button class="add-photo-btn" id="add-photo-btn" onclick="document.getElementById('file-input').click()">+</button>
+  </div>
+  <div class="photo-count" id="photo-count"></div>
+  <input type="file" id="file-input" accept="image/*" multiple />
+</div>
+
+<button class="submit-btn" id="submit-btn" onclick="submitForm()">
+  📋 Записать в таблицу
+</button>
+
+<canvas id="compress-canvas" style="display:none"></canvas>
+
+<script>
+  const CF_URL = "https://functions.yandexcloud.net/d4erjesgk5m8c036ln2i";
+  const SECRET  = "e08636569a0e5345e7647be96734eb4494ab1cf6bd7e2d10";
+  const MAX_PHOTOS = 30;
+  const MAX_PX = 1280;
+  const QUALITY = 0.78;
+
+  const tg = window.Telegram?.WebApp;
+  if (tg) tg.ready();
+
+  // Дата по умолчанию — сегодня
+  const today = new Date();
+  document.getElementById("date").value = today.toISOString().slice(0, 10);
+
+  // --- Фото ---
+  let photos = []; // [{dataUrl, file}]
+
+  document.getElementById("file-input").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+    const available = MAX_PHOTOS - photos.length;
+    const toAdd = files.slice(0, available);
+
+    for (const file of toAdd) {
+      const dataUrl = await compressImage(file);
+      photos.push({ dataUrl, name: file.name });
+    }
+    renderPhotos();
+    e.target.value = "";
+  });
+
+  function compressImage(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.getElementById("compress-canvas");
+        let w = img.width, h = img.height;
+        if (w > MAX_PX || h > MAX_PX) {
+          if (w > h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+          else { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/jpeg", QUALITY));
+      };
+      img.src = url;
+    });
+  }
+
+  function renderPhotos() {
+    const grid = document.getElementById("photo-grid");
+    grid.innerHTML = "";
+
+    photos.forEach((p, i) => {
+      const item = document.createElement("div");
+      item.className = "photo-item";
+      item.innerHTML = `
+        <img src="${p.dataUrl}" />
+        <button class="remove" onclick="removePhoto(${i})">×</button>
+      `;
+      grid.appendChild(item);
+    });
+
+    if (photos.length < MAX_PHOTOS) {
+      const btn = document.createElement("button");
+      btn.className = "add-photo-btn";
+      btn.textContent = "+";
+      btn.onclick = () => document.getElementById("file-input").click();
+      grid.appendChild(btn);
+    }
+
+    document.getElementById("photo-count").textContent =
+      photos.length > 0 ? `Выбрано: ${photos.length} из ${MAX_PHOTOS}` : "";
+  }
+
+  function removePhoto(i) {
+    photos.splice(i, 1);
+    renderPhotos();
+  }
+
+  // --- Отправка ---
+  async function submitForm() {
+    hideMessages();
+
+    const client  = document.getElementById("client").value.trim();
+    const fio     = document.getElementById("fio").value.trim();
+    const car     = document.getElementById("car").value.trim();
+    const plate   = document.getElementById("plate").value.trim();
+    const dateVal = document.getElementById("date").value;
+    const comment = document.getElementById("comment").value.trim();
+
+    if (!client || !fio || !car || !plate || !dateVal) {
+      showError("Заполните все обязательные поля *");
+      return;
+    }
+
+    // Дата ДД.ММ.ГГГГ
+    const [y, m, d] = dateVal.split("-");
+    const dateStr = `${d}.${m}.${y}`;
+
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = true;
+    btn.textContent = "⏳ Отправляем...";
+
+    const body = {
+      client, fio, car,
+      plate: plate.toUpperCase(),
+      date: dateStr,
+      comment,
+      photos: photos.map(p => p.dataUrl),
+    };
+
+    try {
+      const res = await fetch(CF_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Secret-Token": SECRET,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.ok) {
+        showSuccess(`✅ Заявка записана! Строка ${json.row}`);
+        btn.textContent = "✅ Отправлено";
+        setTimeout(() => { if (tg) tg.close(); }, 2000);
+      } else {
+        showError(json.error || "Ошибка сервера");
+        btn.disabled = false;
+        btn.textContent = "📋 Записать в таблицу";
+      }
+    } catch (err) {
+      showError("Нет соединения. Попробуйте ещё раз.");
+      btn.disabled = false;
+      btn.textContent = "📋 Записать в таблицу";
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("msg-error");
+    el.textContent = msg;
+    el.style.display = "block";
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function showSuccess(msg) {
+    const el = document.getElementById("msg-success");
+    el.textContent = msg;
+    el.style.display = "block";
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function hideMessages() {
+    document.getElementById("msg-error").style.display = "none";
+    document.getElementById("msg-success").style.display = "none";
+  }
+</script>
+</body>
+</html>
