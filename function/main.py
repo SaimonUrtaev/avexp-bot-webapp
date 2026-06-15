@@ -1,8 +1,8 @@
 import json
 import os
 import base64
+import uuid
 import urllib.request
-import urllib.parse
 
 from sheets import write_row
 
@@ -11,17 +11,6 @@ BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
 CHAT_ID      = os.environ.get("CHAT_ID", "")
 
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-
-
-def tg_post(method, payload):
-    data = json.dumps(payload).encode()
-    req  = urllib.request.Request(
-        f"{TG_API}/{method}",
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read())
 
 
 def send_photos_to_chat(photos_b64: list, caption: str):
@@ -33,8 +22,7 @@ def send_photos_to_chat(photos_b64: list, caption: str):
             if "," in b64:
                 b64 = b64.split(",", 1)[1]
             img_bytes = base64.b64decode(b64)
-            # Multipart через urllib
-            boundary = "----FormBoundary"
+            boundary = uuid.uuid4().hex
             cap = caption if (i == 0 and j == 0) else ""
             parts = (
                 f"--{boundary}\r\n"
