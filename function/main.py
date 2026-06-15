@@ -13,35 +13,43 @@ CHAT_ID      = os.environ.get("CHAT_ID", "")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
+def send_one_photo(img_bytes: bytes, cap: str):
+    """Отправляет одно фото в Telegram через multipart/form-data."""
+    boundary = uuid.uuid4().hex
+    # caption очищается от управляющих символов чтобы не сломать MIME-структуру
+    safe_cap = cap.replace("\r", " ").replace("\n", " ")
+    parts = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+        f"{CHAT_ID}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="caption"\r\n\r\n'
+        f"{safe_cap}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
+        f"Content-Type: image/jpeg\r\n\r\n"
+    ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
+
+    req = urllib.request.Request(
+        f"{TG_API}/sendPhoto",
+        data=parts,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(req, timeout=15):
+        pass  # закрываем соединение сразу
+
+
 def send_photos_to_chat(photos_b64: list, caption: str):
     """Отправляет фото в Telegram группу по одному."""
-    BATCH = 10
-    for i in range(0, len(photos_b64), BATCH):
-        batch = photos_b64[i:i + BATCH]
-        for j, b64 in enumerate(batch):
-            if "," in b64:
-                b64 = b64.split(",", 1)[1]
-            img_bytes = base64.b64decode(b64)
-            boundary = uuid.uuid4().hex
-            cap = caption if (i == 0 and j == 0) else ""
-            parts = (
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-                f"{CHAT_ID}\r\n"
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="caption"\r\n\r\n'
-                f"{cap}\r\n"
-                f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
-                f"Content-Type: image/jpeg\r\n\r\n"
-            ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
-
-            req = urllib.request.Request(
-                f"{TG_API}/sendPhoto",
-                data=parts,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-            )
-            urllib.request.urlopen(req, timeout=15)
+    for idx, b64 in enumerate(photos_b64):
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(b64)
+        cap = caption if idx == 0 else ""
+        try:
+            send_one_photo(img_bytes, cap)
+        except Exception:
+            pass  # одно фото не дошло — продолжаем остальные
 
 
 def handler(event, context):

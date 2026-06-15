@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 load_dotenv("/Users/mac/Desktop/WORK/Автоэкспертизы_БОТ/.env")
 
 BOT_TOKEN  = os.getenv("BOT_TOKEN")
-CHAT_ID    = int(os.getenv("CHAT_ID"))
+CHAT_ID    = int(os.getenv("CHAT_ID", "0"))
 WEBAPP_URL = "https://saimonurtaev.github.io/avexp-bot-webapp/webapp/"
 
 logging.basicConfig(
@@ -42,6 +42,8 @@ async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
     await update.message.reply_text(
         "Бот Автоэкспертизы НЭ активен.\n"
         "Команда /pin в группе — закрепить кнопку заявки."
