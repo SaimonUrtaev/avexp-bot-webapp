@@ -1,14 +1,14 @@
+import base64
 import json
 import os
-import base64
-import uuid
 import urllib.request
+import uuid
 
 from sheets import write_row
 
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
-BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
-CHAT_ID      = os.environ.get("CHAT_ID", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+CHAT_ID = os.environ.get("CHAT_ID", "")
 
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -19,16 +19,20 @@ def send_one_photo(img_bytes: bytes, cap: str):
     # caption очищается от управляющих символов чтобы не сломать MIME-структуру
     safe_cap = cap.replace("\r", " ").replace("\n", " ")
     parts = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-        f"{CHAT_ID}\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="caption"\r\n\r\n'
-        f"{safe_cap}\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
-        f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+            f"{CHAT_ID}\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="caption"\r\n\r\n'
+            f"{safe_cap}\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
+            f"Content-Type: image/jpeg\r\n\r\n"
+        ).encode()
+        + img_bytes
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
 
     req = urllib.request.Request(
         f"{TG_API}/sendPhoto",
@@ -52,12 +56,17 @@ def send_photos_to_chat(photos_b64: list, caption: str):
             pass  # одно фото не дошло — продолжаем остальные
 
 
-CORS_HEADERS = {
+_CORS_BASE = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Secret-Token",
-    "Content-Type": "application/json",
 }
+
+# Для preflight 204 — без Content-Type (нет тела)
+CORS_PREFLIGHT = _CORS_BASE
+
+# Для ответов с JSON-телом
+CORS_HEADERS = {**_CORS_BASE, "Content-Type": "application/json"}
 
 
 def handler(event, context):
@@ -65,12 +74,11 @@ def handler(event, context):
 
     # CORS preflight — браузер спрашивает разрешение перед реальным запросом
     if event.get("httpMethod") == "OPTIONS":
-        return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
+        return {"statusCode": 204, "headers": CORS_PREFLIGHT, "body": ""}
 
     # Проверка секретного токена
     headers = event.get("headers", {}) or {}
-    # Yandex Cloud передаёт заголовки в нижнем регистре
-    token = headers.get("x-secret-token", "") or headers.get("X-Secret-Token", "")
+    token = headers.get("x-secret-token") or headers.get("X-Secret-Token", "")
     if SECRET_TOKEN and token != SECRET_TOKEN:
         return {
             "statusCode": 403,
@@ -90,6 +98,13 @@ def handler(event, context):
             "statusCode": 400,
             "headers": CORS_HEADERS,
             "body": json.dumps({"error": "Invalid JSON"}, ensure_ascii=False),
+        }
+
+    if not isinstance(data, dict):
+        return {
+            "statusCode": 400,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": "Body must be a JSON object"}, ensure_ascii=False),
         }
 
     # Проверка обязательных полей

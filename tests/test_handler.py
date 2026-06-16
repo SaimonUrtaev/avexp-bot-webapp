@@ -2,7 +2,13 @@
 Unit-тесты для function/main.py
 Запуск: venv/bin/python -m pytest tests/ -v
 """
-import sys, os, json, base64, types
+
+import base64
+import json
+import os
+import sys
+import types
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "function"))
 
 # --- Заглушки зависимостей ---
@@ -14,16 +20,18 @@ sheets_mock = types.ModuleType("sheets")
 sheets_mock.write_row = mock.MagicMock(return_value=42)
 sys.modules["sheets"] = sheets_mock
 
-os.environ.setdefault("SECRET_TOKEN", "test-secret")
-os.environ.setdefault("BOT_TOKEN", "000:TEST")
-os.environ.setdefault("CHAT_ID", "-100123456")
+# Принудительно устанавливаем тестовые значения — setdefault не подходит,
+# т.к. test_bot.py загружает реальный .env через config.py раньше нас.
+os.environ["SECRET_TOKEN"] = "test-secret"
+os.environ["BOT_TOKEN"] = "000:TEST"
+os.environ["CHAT_ID"] = "-100123456"
 os.environ.setdefault("SPREADSHEET_ID", "fake-id")
 os.environ.setdefault("SHEET_NAME", "Лист1")
 
-import main  # импортируем после установки env и заглушек
-
+import main  # noqa: E402  # импортируем после установки env и заглушек
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
+
 
 def make_event(body: dict, token: str = "test-secret") -> dict:
     return {
@@ -43,6 +51,7 @@ VALID_BODY = {
 
 
 # ─── Тесты handler ─────────────────────────────────────────────────────────────
+
 
 def test_valid_request_returns_200():
     sheets_mock.write_row.return_value = 5
@@ -110,6 +119,7 @@ def test_response_has_content_type_header():
 
 # ─── Тесты send_one_photo ───────────────────────────────────────────────────────
 
+
 def test_send_one_photo_caption_strips_crlf():
     """Caption с \r\n не должен ломать MIME-структуру."""
     tiny_jpeg = base64.b64decode(
@@ -123,8 +133,6 @@ def test_send_one_photo_caption_strips_crlf():
     malicious_caption = "нормальный текст\r\n--boundary--\r\nвредная часть"
 
     called_parts = {}
-
-    original_urlopen = main.urllib.request.urlopen
 
     def fake_urlopen(req, timeout=None):
         called_parts["data"] = req.data
@@ -140,10 +148,14 @@ def test_send_one_photo_caption_strips_crlf():
     body_str = called_parts["data"].decode("utf-8", errors="replace")
     # caption должен быть в теле, но \r\n внутри него заменены пробелами
     # (иначе MIME-структура была бы сломана)
-    caption_start = body_str.index('name="caption"\r\n\r\n') + len('name="caption"\r\n\r\n')
-    caption_end   = body_str.index("\r\n--", caption_start)
+    caption_start = body_str.index('name="caption"\r\n\r\n') + len(
+        'name="caption"\r\n\r\n'
+    )
+    caption_end = body_str.index("\r\n--", caption_start)
     caption_value = body_str[caption_start:caption_end]
-    assert "\r\n" not in caption_value, f"\\r\\n попал внутрь caption: {caption_value!r}"
+    assert (
+        "\r\n" not in caption_value
+    ), f"\\r\\n попал внутрь caption: {caption_value!r}"
 
 
 def test_send_photos_to_chat_continues_after_one_failure():

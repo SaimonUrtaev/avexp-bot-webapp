@@ -1,9 +1,11 @@
+import os
+
 import gspread
 from google.oauth2.service_account import Credentials
-import os
 
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 SHEET_NAME = os.environ["SHEET_NAME"]
+GOOGLE_CREDENTIALS_FILE = os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -20,7 +22,9 @@ BORDER = {
 
 
 def get_sheet():
-    creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    creds = Credentials.from_service_account_file(
+        GOOGLE_CREDENTIALS_FILE, scopes=SCOPES
+    )
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
     return spreadsheet, spreadsheet.worksheet(SHEET_NAME)
@@ -28,33 +32,37 @@ def get_sheet():
 
 def apply_row_format(spreadsheet, sheet, row_index):
     sheet_id = sheet.id
-    spreadsheet.batch_update({
-        "requests": [{
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": row_index,
-                    "endRowIndex": row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": NUM_COLUMNS,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "horizontalAlignment": "CENTER",
-                        "verticalAlignment": "MIDDLE",
-                        "wrapStrategy": "CLIP",
-                        "borders": {
-                            "top": BORDER,
-                            "bottom": BORDER,
-                            "left": BORDER,
-                            "right": BORDER,
+    spreadsheet.batch_update(
+        {
+            "requests": [
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": row_index,
+                            "endRowIndex": row_index + 1,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": NUM_COLUMNS,
                         },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "horizontalAlignment": "CENTER",
+                                "verticalAlignment": "MIDDLE",
+                                "wrapStrategy": "CLIP",
+                                "borders": {
+                                    "top": BORDER,
+                                    "bottom": BORDER,
+                                    "left": BORDER,
+                                    "right": BORDER,
+                                },
+                            }
+                        },
+                        "fields": "userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy,borders)",
                     }
-                },
-                "fields": "userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy,borders)",
-            }
-        }]
-    })
+                }
+            ]
+        }
+    )
 
 
 def write_row(data: dict) -> int:
@@ -68,12 +76,12 @@ def write_row(data: dict) -> int:
         data.get("client", ""),
         data.get("car", ""),
         data.get("plate", ""),
-        "",                        # Статус Оплаты — вручную
-        "",                        # Статус НЭ — вручную
-        "",                        # Кто Ведет — вручную
+        "",  # Статус Оплаты — вручную
+        "",  # Статус НЭ — вручную
+        "",  # Кто Ведет — вручную
         data.get("fio", ""),
         data.get("date", ""),
-        "",                        # Стоимость НЭ — вручную
+        "",  # Стоимость НЭ — вручную
         data.get("comment", ""),
     ]
 
