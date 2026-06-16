@@ -52,8 +52,20 @@ def send_photos_to_chat(photos_b64: list, caption: str):
             pass  # одно фото не дошло — продолжаем остальные
 
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-Secret-Token",
+    "Content-Type": "application/json",
+}
+
+
 def handler(event, context):
     """Yandex Cloud Function entry point."""
+
+    # CORS preflight — браузер спрашивает разрешение перед реальным запросом
+    if event.get("httpMethod") == "OPTIONS":
+        return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
 
     # Проверка секретного токена
     headers = event.get("headers", {}) or {}
@@ -62,6 +74,7 @@ def handler(event, context):
     if SECRET_TOKEN and token != SECRET_TOKEN:
         return {
             "statusCode": 403,
+            "headers": CORS_HEADERS,
             "body": json.dumps({"error": "Forbidden"}, ensure_ascii=False),
         }
 
@@ -75,6 +88,7 @@ def handler(event, context):
     except json.JSONDecodeError:
         return {
             "statusCode": 400,
+            "headers": CORS_HEADERS,
             "body": json.dumps({"error": "Invalid JSON"}, ensure_ascii=False),
         }
 
@@ -84,6 +98,7 @@ def handler(event, context):
     if missing:
         return {
             "statusCode": 400,
+            "headers": CORS_HEADERS,
             "body": json.dumps(
                 {"error": f"Не заполнены поля: {', '.join(missing)}"},
                 ensure_ascii=False,
@@ -96,6 +111,7 @@ def handler(event, context):
     except Exception as e:
         return {
             "statusCode": 500,
+            "headers": CORS_HEADERS,
             "body": json.dumps({"error": str(e)}, ensure_ascii=False),
         }
 
@@ -111,10 +127,9 @@ def handler(event, context):
         try:
             send_photos_to_chat(photos, caption)
         except Exception as e:
-            # Фото не дошли — но заявка уже записана, не фатально
             return {
                 "statusCode": 200,
-                "headers": {"Content-Type": "application/json"},
+                "headers": CORS_HEADERS,
                 "body": json.dumps(
                     {"ok": True, "row": row_num, "photo_error": str(e)},
                     ensure_ascii=False,
@@ -123,6 +138,6 @@ def handler(event, context):
 
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": CORS_HEADERS,
         "body": json.dumps({"ok": True, "row": row_num}, ensure_ascii=False),
     }

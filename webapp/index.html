@@ -227,7 +227,7 @@
   const QUALITY = 0.78;
 
   const tg = window.Telegram?.WebApp;
-  if (tg) tg.ready();
+  if (tg) { tg.ready(); tg.expand(); }
 
   // Дата по умолчанию — сегодня
   const today = new Date();
