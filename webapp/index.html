@@ -349,9 +349,8 @@
       const json = await res.json();
 
       if (res.ok && json.ok) {
-        showSuccess(`✅ Заявка записана! Строка ${json.row}`);
         btn.textContent = "✅ Отправлено";
-        setTimeout(() => { if (tg) tg.close(); }, 2000);
+        if (tg) { tg.close(); } else { showSuccess(`✅ Заявка записана! Строка ${json.row}`); }
       } else {
         showError(json.error || "Ошибка сервера");
         btn.disabled = false;

@@ -1,6 +1,6 @@
 import logging
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from config import BOT_TOKEN, CHAT_ID, WEBAPP_URL
@@ -21,6 +21,13 @@ async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет и закрепляет кнопку в группе."""
     if update.effective_chat.id != CHAT_ID:
         return
+
+    # Убираем ReplyKeyboard если осталась от предыдущей версии
+    await context.bot.send_message(
+        chat_id=CHAT_ID,
+        text="‌",  # невидимый символ
+        reply_markup=ReplyKeyboardRemove(),
+    )
 
     msg = await context.bot.send_message(
         chat_id=CHAT_ID,

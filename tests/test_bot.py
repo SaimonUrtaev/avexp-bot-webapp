@@ -24,12 +24,15 @@ def test_cmd_pin_sends_and_pins():
 
     asyncio.run(bot.cmd_pin(update, context))
 
-    assert len(sent) == 2
+    assert len(sent) == 3
+    # первое сообщение — убираем ReplyKeyboard
     assert sent[0]["chat_id"] == bot.CHAT_ID
-    assert "Нажмите кнопку" in sent[0]["text"]
-    assert sent[0]["reply_markup"] is not None
-    assert sent[1]["pinned"] is True
-    assert sent[1]["message_id"] == 123
+    # второе — кнопка заявки
+    assert "Нажмите кнопку" in sent[1]["text"]
+    assert sent[1]["reply_markup"] is not None
+    # третье — закрепление
+    assert sent[2]["pinned"] is True
+    assert sent[2]["message_id"] == 123
 
 
 def test_cmd_start_replies_text():
