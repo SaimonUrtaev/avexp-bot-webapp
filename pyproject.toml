@@ -1,0 +1,27 @@
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = 'black'
+line_length = 88
+known_first_party = ['utils', 'config', 'bot', 'function', 'cloud_function']
+
+[tool.ruff]
+line-length = 88
+exclude = ['.git', 'venv', '__pycache__', 'function.zip']
+
+[tool.ruff.lint]
+select = ['E', 'F', 'W', 'I', 'B', 'C', 'TID']
+ignore = ['E501']
+
+[tool.pytest.ini_options]
+minversion = '7.0'
+testpaths = ['tests']
+python_files = ['test_*.py']
+addopts = '-q'
+
+[build-system]
+requires = ['setuptools>=61.0']
+build-backend = 'setuptools.build_meta'

@@ -7,3 +7,4 @@ venv/
 function.zip
 function/credentials.json
 cloud_function/
+webapp/secret.js

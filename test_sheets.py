@@ -1,8 +1,9 @@
-import gspread
-from google.oauth2.service_account import Credentials
-from dotenv import load_dotenv
 import os
 from datetime import datetime
+
+import gspread
+from dotenv import load_dotenv
+from google.oauth2.service_account import Credentials
 
 load_dotenv("/Users/mac/Desktop/WORK/Автоэкспертизы_БОТ/.env")
 
@@ -33,33 +34,37 @@ def get_sheet():
 def apply_row_format(spreadsheet, sheet, row_index):
     """Применяет рамки и выравнивание к строке (индекс с 0)."""
     sheet_id = sheet.id
-    spreadsheet.batch_update({
-        "requests": [{
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": row_index,
-                    "endRowIndex": row_index + 1,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": NUM_COLUMNS,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "horizontalAlignment": "CENTER",
-                        "verticalAlignment": "MIDDLE",
-                        "wrapStrategy": "CLIP",
-                        "borders": {
-                            "top": BORDER,
-                            "bottom": BORDER,
-                            "left": BORDER,
-                            "right": BORDER,
+    spreadsheet.batch_update(
+        {
+            "requests": [
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": row_index,
+                            "endRowIndex": row_index + 1,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": NUM_COLUMNS,
                         },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "horizontalAlignment": "CENTER",
+                                "verticalAlignment": "MIDDLE",
+                                "wrapStrategy": "CLIP",
+                                "borders": {
+                                    "top": BORDER,
+                                    "bottom": BORDER,
+                                    "left": BORDER,
+                                    "right": BORDER,
+                                },
+                            }
+                        },
+                        "fields": "userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy,borders)",
                     }
-                },
-                "fields": "userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy,borders)",
-            }
-        }]
-    })
+                }
+            ]
+        }
+    )
 
 
 def write_row(data: dict):
@@ -79,12 +84,12 @@ def write_row(data: dict):
         data.get("client", ""),
         data.get("car", ""),
         data.get("plate", ""),
-        "",                        # Статус Оплаты — вручную
-        "",                        # Статус НЭ — вручную
-        "",                        # Кто Ведет — вручную
+        "",  # Статус Оплаты — вручную
+        "",  # Статус НЭ — вручную
+        "",  # Кто Ведет — вручную
         data.get("fio", ""),
         data.get("date", ""),
-        "",                        # Стоимость НЭ — вручную
+        "",  # Стоимость НЭ — вручную
         data.get("comment", ""),
     ]
 
@@ -99,14 +104,16 @@ def write_row(data: dict):
 
 
 def test_write():
-    row_num = write_row({
-        "client": "ТЕСТ",
-        "fio": "Тестов Тест Тестович",
-        "car": "Toyota Camry",
-        "plate": "А000АА777",
-        "date": datetime.now().strftime("%d.%m.%Y"),
-        "comment": "Тестовая запись — можно удалить",
-    })
+    row_num = write_row(
+        {
+            "client": "ТЕСТ",
+            "fio": "Тестов Тест Тестович",
+            "car": "Toyota Camry",
+            "plate": "А000АА777",
+            "date": datetime.now().strftime("%d.%m.%Y"),
+            "comment": "Тестовая запись — можно удалить",
+        }
+    )
     print(f"✅ Запись в таблицу прошла успешно! Строка {row_num}")
     print(f"   Лист: {SHEET_NAME}")
     print(f"   Таблица: {SPREADSHEET_ID}")

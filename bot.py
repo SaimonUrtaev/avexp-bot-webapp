@@ -1,16 +1,9 @@
 import logging
-import os
-from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-load_dotenv("/Users/mac/Desktop/WORK/Автоэкспертизы_БОТ/.env")
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID   = int(os.getenv("CHAT_ID", "0"))
-
-# Зарегистрированный WebApp — открывается нативно внутри Telegram
-WEBAPP_LINK = "https://t.me/AvExp24_bot/newapp"
+from config import BOT_TOKEN, CHAT_ID, WEBAPP_URL
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -19,9 +12,9 @@ logging.basicConfig(
 
 
 def group_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("📋 Новая заявка НЭ", url=WEBAPP_LINK)
-    ]])
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("📋 Новая заявка НЭ", url=WEBAPP_URL)]]
+    )
 
 
 async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,7 +49,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("pin",   cmd_pin))
+    app.add_handler(CommandHandler("pin", cmd_pin))
     logging.info("Бот запущен.")
     app.run_polling(drop_pending_updates=True)
 
