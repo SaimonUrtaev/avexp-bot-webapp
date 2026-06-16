@@ -23,11 +23,12 @@ async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Убираем ReplyKeyboard если осталась от предыдущей версии
-    await context.bot.send_message(
+    rm = await context.bot.send_message(
         chat_id=CHAT_ID,
-        text="‌",  # невидимый символ
+        text=".",
         reply_markup=ReplyKeyboardRemove(),
     )
+    await context.bot.delete_message(chat_id=CHAT_ID, message_id=rm.message_id)
 
     msg = await context.bot.send_message(
         chat_id=CHAT_ID,
