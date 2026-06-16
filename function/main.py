@@ -1,4 +1,5 @@
 import base64
+import html
 import json
 import os
 import urllib.request
@@ -13,34 +14,57 @@ CHAT_ID = os.environ.get("CHAT_ID", "")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
-def send_one_photo(img_bytes: bytes, cap: str):
-    """Отправляет одно фото в Telegram через multipart/form-data."""
+def _send_single_photo(img_bytes: bytes) -> None:
+    """Отправляет одно фото через sendPhoto."""
     boundary = uuid.uuid4().hex
-    # caption очищается от управляющих символов чтобы не сломать MIME-структуру
-    safe_cap = cap.replace("\r", " ").replace("\n", " ")
-    parts = (
-        (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-            f"{CHAT_ID}\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="caption"\r\n\r\n'
-            f"{safe_cap}\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
-            f"Content-Type: image/jpeg\r\n\r\n"
-        ).encode()
-        + img_bytes
-        + f"\r\n--{boundary}--\r\n".encode()
-    )
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+        f"{CHAT_ID}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
+        f"Content-Type: image/jpeg\r\n\r\n"
+    ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
 
     req = urllib.request.Request(
         f"{TG_API}/sendPhoto",
-        data=parts,
+        data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=15):
-        pass  # закрываем соединение сразу
+    with urllib.request.urlopen(req, timeout=30):
+        pass
+
+
+def _send_media_group(photos_bytes: list) -> None:
+    """Отправляет группу 2–10 фото через sendMediaGroup (один альбом)."""
+    boundary = uuid.uuid4().hex
+    media = [{"type": "photo", "media": f"attach://file_{i}"} for i in range(len(photos_bytes))]
+
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+        f"{CHAT_ID}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="media"\r\n\r\n'
+        f"{json.dumps(media, ensure_ascii=False)}\r\n"
+    ).encode()
+
+    for i, img_bytes in enumerate(photos_bytes):
+        body += (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file_{i}"; filename="photo.jpg"\r\n'
+            f"Content-Type: image/jpeg\r\n\r\n"
+        ).encode() + img_bytes + b"\r\n"
+
+    body += f"--{boundary}--\r\n".encode()
+
+    req = urllib.request.Request(
+        f"{TG_API}/sendMediaGroup",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(req, timeout=30):
+        pass
 
 
 def send_text_to_chat(text: str):
@@ -82,32 +106,56 @@ def send_button_to_chat():
         pass
 
 
+def _e(value: str) -> str:
+    """Экранирует HTML-спецсимволы в пользовательском вводе."""
+    return html.escape(str(value))
+
+
 def build_notification(row_num: int, data: dict) -> str:
     """Формирует текст уведомления о заявке НЭ."""
     lines = [f"📋 <b>Заявка НЭ #{row_num}</b>", ""]
-    lines.append(f"🏢 <b>Клиент:</b> {data.get('client', '—')}")
-    lines.append(f"🚗 <b>Авто:</b> {data.get('car', '—')}")
-    lines.append(f"🔢 <b>Госномер:</b> {data.get('plate', '—')}")
-    lines.append(f"📅 <b>Дата ДТП:</b> {data.get('date', '—')}")
+    lines.append(f"🏢 <b>Клиент:</b> {_e(data.get('client', '—'))}")
+    lines.append(f"🚗 <b>Авто:</b> {_e(data.get('car', '—'))}")
+    lines.append(f"🔢 <b>Госномер:</b> {_e(data.get('plate', '—'))}")
+    lines.append(f"📅 <b>Дата ДТП:</b> {_e(data.get('date', '—'))}")
     if data.get("status_dtp"):
-        lines.append(f"🔖 <b>Статус ДТП:</b> {data.get('status_dtp')}")
+        lines.append(f"🔖 <b>Статус ДТП:</b> {_e(data.get('status_dtp'))}")
     if data.get("comment"):
-        lines.append(f"📝 <b>Комментарий:</b> {data.get('comment')}")
+        lines.append(f"📝 <b>Комментарий:</b> {_e(data.get('comment'))}")
     return "\n".join(lines)
 
 
 def send_photos_to_chat(photos_b64: list, caption: str) -> list[str]:
-    """Отправляет фото в Telegram группу по одному. Возвращает список ошибок."""
+    """Отправляет фото группами по 10 через sendMediaGroup. Возвращает список ошибок."""
     errors = []
-    for idx, b64 in enumerate(photos_b64):
+
+    # Декодируем все фото заранее
+    photos_bytes = []
+    for b64 in photos_b64:
         if "," in b64:
             b64 = b64.split(",", 1)[1]
-        cap = caption if idx == 0 else ""
         try:
-            img_bytes = base64.b64decode(b64)
-            send_one_photo(img_bytes, cap)
+            photos_bytes.append(base64.b64decode(b64))
         except Exception as e:
             errors.append(str(e))
+
+    if not photos_bytes:
+        return errors
+
+    # 1 фото → sendPhoto; 2+ фото → sendMediaGroup группами по 10
+    if len(photos_bytes) == 1:
+        try:
+            _send_single_photo(photos_bytes[0])
+        except Exception as e:
+            errors.append(str(e))
+    else:
+        for i in range(0, len(photos_bytes), 10):
+            group = photos_bytes[i:i + 10]
+            try:
+                _send_media_group(group)
+            except Exception as e:
+                errors.append(str(e))
+
     return errors
 
 
@@ -186,6 +234,7 @@ def handler(event, context):
         }
 
     # Уведомление в Telegram
+    photo_errors = []
     if BOT_TOKEN and CHAT_ID:
         try:
             send_text_to_chat(build_notification(row_num, data))
@@ -196,7 +245,6 @@ def handler(event, context):
                 "body": json.dumps({"ok": True, "row": row_num, "notify_error": str(e)}, ensure_ascii=False),
             }
 
-        photo_errors = []
         photos = data.get("photos", [])
         if photos:
             photo_errors = send_photos_to_chat(photos, "")
