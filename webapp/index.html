@@ -180,8 +180,8 @@
 </div>
 
 <div class="field">
-  <label>ФИО клиента *</label>
-  <input type="text" id="fio" placeholder="Иванов Иван Иванович" />
+  <label>Статус ДТП</label>
+  <input type="text" id="status_dtp" placeholder="В работу / Без осаго / Виновник без осаго..." />
 </div>
 
 <div class="field">
@@ -308,14 +308,14 @@
   async function submitForm() {
     hideMessages();
 
-    const client  = document.getElementById("client").value.trim();
-    const fio     = document.getElementById("fio").value.trim();
-    const car     = document.getElementById("car").value.trim();
-    const plate   = document.getElementById("plate").value.trim();
-    const dateVal = document.getElementById("date").value;
-    const comment = document.getElementById("comment").value.trim();
+    const client     = document.getElementById("client").value.trim();
+    const status_dtp = document.getElementById("status_dtp").value.trim();
+    const car        = document.getElementById("car").value.trim();
+    const plate      = document.getElementById("plate").value.trim();
+    const dateVal    = document.getElementById("date").value;
+    const comment    = document.getElementById("comment").value.trim();
 
-    if (!client || !fio || !car || !plate || !dateVal) {
+    if (!client || !car || !plate || !dateVal) {
       showError("Заполните все обязательные поля *");
       return;
     }
@@ -329,7 +329,7 @@
     btn.textContent = "⏳ Отправляем...";
 
     const body = {
-      client, fio, car,
+      client, status_dtp, car,
       plate: plate.toUpperCase(),
       date: dateStr,
       comment,

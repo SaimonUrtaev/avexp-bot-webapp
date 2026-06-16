@@ -79,7 +79,7 @@ def write_row(data: dict) -> int:
         "",  # Статус Оплаты — вручную
         "",  # Статус НЭ — вручную
         "",  # Кто Ведет — вручную
-        data.get("fio", ""),
+        data.get("status_dtp", ""),
         data.get("date", ""),
         "",  # Стоимость НЭ — вручную
         data.get("comment", ""),

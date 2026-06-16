@@ -58,15 +58,39 @@ def send_text_to_chat(text: str):
         pass
 
 
+WEBAPP_URL = "https://t.me/AvExp24_bot/newapp"
+
+
+def send_button_to_chat():
+    """Отправляет кнопку 'Новая заявка на НЭ' в группу."""
+    payload = json.dumps({
+        "chat_id": CHAT_ID,
+        "text": "➕ Новая заявка",
+        "reply_markup": {
+            "inline_keyboard": [[{
+                "text": "📋 Новая заявка на НЭ",
+                "url": WEBAPP_URL,
+            }]]
+        },
+    }, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        f"{TG_API}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15):
+        pass
+
+
 def build_notification(row_num: int, data: dict) -> str:
     """Формирует текст уведомления о заявке НЭ."""
     lines = [f"📋 <b>Заявка НЭ #{row_num}</b>", ""]
     lines.append(f"🏢 <b>Клиент:</b> {data.get('client', '—')}")
-    if data.get("fio"):
-        lines.append(f"🧑 <b>ФИО:</b> {data.get('fio')}")
     lines.append(f"🚗 <b>Авто:</b> {data.get('car', '—')}")
     lines.append(f"🔢 <b>Госномер:</b> {data.get('plate', '—')}")
     lines.append(f"📅 <b>Дата ДТП:</b> {data.get('date', '—')}")
+    if data.get("status_dtp"):
+        lines.append(f"🔖 <b>Статус ДТП:</b> {data.get('status_dtp')}")
     if data.get("comment"):
         lines.append(f"📝 <b>Комментарий:</b> {data.get('comment')}")
     return "\n".join(lines)
@@ -78,9 +102,9 @@ def send_photos_to_chat(photos_b64: list, caption: str) -> list[str]:
     for idx, b64 in enumerate(photos_b64):
         if "," in b64:
             b64 = b64.split(",", 1)[1]
-        img_bytes = base64.b64decode(b64)
         cap = caption if idx == 0 else ""
         try:
+            img_bytes = base64.b64decode(b64)
             send_one_photo(img_bytes, cap)
         except Exception as e:
             errors.append(str(e))
@@ -172,18 +196,25 @@ def handler(event, context):
                 "body": json.dumps({"ok": True, "row": row_num, "notify_error": str(e)}, ensure_ascii=False),
             }
 
+        photo_errors = []
         photos = data.get("photos", [])
         if photos:
             photo_errors = send_photos_to_chat(photos, "")
-            if photo_errors:
-                return {
-                    "statusCode": 200,
-                    "headers": CORS_HEADERS,
-                    "body": json.dumps(
-                        {"ok": True, "row": row_num, "photo_error": photo_errors[0]},
-                        ensure_ascii=False,
-                    ),
-                }
+
+        try:
+            send_button_to_chat()
+        except Exception:
+            pass  # кнопка не критична — данные уже записаны
+
+    if photo_errors:
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": json.dumps(
+                {"ok": True, "row": row_num, "photo_error": photo_errors[0]},
+                ensure_ascii=False,
+            ),
+        }
 
     return {
         "statusCode": 200,
