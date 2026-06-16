@@ -43,8 +43,38 @@ def send_one_photo(img_bytes: bytes, cap: str):
         pass  # закрываем соединение сразу
 
 
-def send_photos_to_chat(photos_b64: list, caption: str):
-    """Отправляет фото в Telegram группу по одному."""
+def send_text_to_chat(text: str):
+    """Отправляет текстовое сообщение в Telegram группу."""
+    payload = json.dumps(
+        {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
+        ensure_ascii=False,
+    ).encode()
+    req = urllib.request.Request(
+        f"{TG_API}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=15):
+        pass
+
+
+def build_notification(row_num: int, data: dict) -> str:
+    """Формирует текст уведомления о заявке НЭ."""
+    lines = [f"📋 <b>Заявка НЭ #{row_num}</b>", ""]
+    lines.append(f"🏢 <b>Клиент:</b> {data.get('client', '—')}")
+    if data.get("fio"):
+        lines.append(f"🧑 <b>ФИО:</b> {data.get('fio')}")
+    lines.append(f"🚗 <b>Авто:</b> {data.get('car', '—')}")
+    lines.append(f"🔢 <b>Госномер:</b> {data.get('plate', '—')}")
+    lines.append(f"📅 <b>Дата ДТП:</b> {data.get('date', '—')}")
+    if data.get("comment"):
+        lines.append(f"📝 <b>Комментарий:</b> {data.get('comment')}")
+    return "\n".join(lines)
+
+
+def send_photos_to_chat(photos_b64: list, caption: str) -> list[str]:
+    """Отправляет фото в Telegram группу по одному. Возвращает список ошибок."""
+    errors = []
     for idx, b64 in enumerate(photos_b64):
         if "," in b64:
             b64 = b64.split(",", 1)[1]
@@ -52,8 +82,9 @@ def send_photos_to_chat(photos_b64: list, caption: str):
         cap = caption if idx == 0 else ""
         try:
             send_one_photo(img_bytes, cap)
-        except Exception:
-            pass  # одно фото не дошло — продолжаем остальные
+        except Exception as e:
+            errors.append(str(e))
+    return errors
 
 
 _CORS_BASE = {
@@ -63,7 +94,7 @@ _CORS_BASE = {
 }
 
 # Для preflight 204 — без Content-Type (нет тела)
-CORS_PREFLIGHT = _CORS_BASE
+CORS_PREFLIGHT = {**_CORS_BASE}
 
 # Для ответов с JSON-телом
 CORS_HEADERS = {**_CORS_BASE, "Content-Type": "application/json"}
@@ -130,26 +161,29 @@ def handler(event, context):
             "body": json.dumps({"error": str(e)}, ensure_ascii=False),
         }
 
-    # Отправка фото в Telegram (если есть)
-    photos = data.get("photos", [])
-    if photos and BOT_TOKEN and CHAT_ID:
-        caption = (
-            f"📋 Заявка НЭ #{row_num}\n"
-            f"👤 {data.get('client')} / {data.get('fio')}\n"
-            f"🚗 {data.get('car')} {data.get('plate')}\n"
-            f"📅 {data.get('date')}"
-        )
+    # Уведомление в Telegram
+    if BOT_TOKEN and CHAT_ID:
         try:
-            send_photos_to_chat(photos, caption)
+            send_text_to_chat(build_notification(row_num, data))
         except Exception as e:
             return {
                 "statusCode": 200,
                 "headers": CORS_HEADERS,
-                "body": json.dumps(
-                    {"ok": True, "row": row_num, "photo_error": str(e)},
-                    ensure_ascii=False,
-                ),
+                "body": json.dumps({"ok": True, "row": row_num, "notify_error": str(e)}, ensure_ascii=False),
             }
+
+        photos = data.get("photos", [])
+        if photos:
+            photo_errors = send_photos_to_chat(photos, "")
+            if photo_errors:
+                return {
+                    "statusCode": 200,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps(
+                        {"ok": True, "row": row_num, "photo_error": photo_errors[0]},
+                        ensure_ascii=False,
+                    ),
+                }
 
     return {
         "statusCode": 200,
