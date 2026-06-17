@@ -376,9 +376,8 @@
       if (res.ok && json.ok) {
         btn.textContent = "✅ Отправлено";
         if (json.photo_error) {
-          showError(`✅ Заявка записана (строка ${json.row}), но фото не отправились в Telegram: ${json.photo_error}`);
-          btn.disabled = false;
-          btn.textContent = "📋 Записать в таблицу";
+          showError(`⚠️ Заявка записана (строка ${json.row}), но фото не отправились: ${json.photo_error}`);
+          setTimeout(() => { if (tg) tg.close(); }, 3000);
         } else if (tg) {
           tg.close();
         } else {

@@ -57,7 +57,7 @@ def _send_single_photo(img_bytes: bytes) -> None:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=10):
+    with urllib.request.urlopen(req, timeout=25):
         pass
 
 
@@ -92,7 +92,7 @@ def _send_media_group(photos_bytes: list) -> None:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=10):
+    with urllib.request.urlopen(req, timeout=25):
         pass
 
 
