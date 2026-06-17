@@ -205,7 +205,7 @@
 </div>
 
 <div class="photo-section">
-  <div class="photo-label">📷 Фото (до 100)</div>
+  <div class="photo-label">📷 Фото (до 50, не более 2.5 МБ)</div>
   <div class="photo-grid" id="photo-grid">
     <button class="add-photo-btn" id="add-photo-btn" onclick="document.getElementById('file-input').click()">+</button>
   </div>
@@ -220,8 +220,8 @@
 <canvas id="compress-canvas" style="display:none"></canvas>
 <script>
   const CF_URL = "https://functions.yandexcloud.net/d4erjesgk5m8c036ln2i";
-  const SECRET  = "e08636569a0e5345e7647be96734eb4494ab1cf6bd7e2d10";
-  const MAX_PHOTOS = 100;
+  const MAX_PHOTOS = 50;
+  const MAX_BODY_BYTES = 2.5 * 1024 * 1024; // 2.5 МБ — ниже лимита CF 3 МБ
   const MAX_PX = 1280;
   const QUALITY = 0.78;
 
@@ -239,6 +239,10 @@
   // --- Фото ---
   let photos = []; // [{dataUrl, file}]
 
+  function totalPhotosBytes() {
+    return photos.reduce((sum, p) => sum + p.dataUrl.length, 0);
+  }
+
   fileInput.addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
     const available = MAX_PHOTOS - photos.length;
@@ -246,6 +250,11 @@
 
     for (const file of toAdd) {
       const dataUrl = await compressImage(file);
+      if (totalPhotosBytes() + dataUrl.length > MAX_BODY_BYTES) {
+        renderPhotos();
+        showSizeWarning();
+        break;
+      }
       photos.push({ dataUrl, name: file.name });
     }
     renderPhotos();
@@ -287,7 +296,10 @@
       grid.appendChild(item);
     });
 
-    if (photos.length < MAX_PHOTOS) {
+    const usedBytes = totalPhotosBytes();
+    const sizeAtLimit = usedBytes >= MAX_BODY_BYTES;
+
+    if (photos.length < MAX_PHOTOS && !sizeAtLimit) {
       const btn = document.createElement("button");
       btn.className = "add-photo-btn";
       btn.textContent = "+";
@@ -295,8 +307,17 @@
       grid.appendChild(btn);
     }
 
-    document.getElementById("photo-count").textContent =
-      photos.length > 0 ? `Выбрано: ${photos.length} из ${MAX_PHOTOS}` : "";
+    if (photos.length > 0) {
+      const mb = (usedBytes / 1024 / 1024).toFixed(1);
+      const maxMb = (MAX_BODY_BYTES / 1024 / 1024).toFixed(1);
+      const countText = `Фото: ${photos.length}`;
+      const sizeText = `Размер: ${mb} МБ из ${maxMb} МБ`;
+      document.getElementById("photo-count").textContent = `${countText} · ${sizeText}`;
+      document.getElementById("photo-count").style.color =
+        sizeAtLimit ? "var(--tg-theme-destructive-text-color, #e53935)" : "";
+    } else {
+      document.getElementById("photo-count").textContent = "";
+    }
   }
 
   function removePhoto(i) {
@@ -324,6 +345,12 @@
     const [y, m, d] = dateVal.split("-");
     const dateStr = `${d}.${m}.${y}`;
 
+    const init_data = tg ? (tg.initData || "") : "";
+    if (!init_data) {
+      showError("Форма доступна только из Telegram. Откройте заявку через кнопку в чате.");
+      return;
+    }
+
     const btn = document.getElementById("submit-btn");
     btn.disabled = true;
     btn.textContent = "⏳ Отправляем...";
@@ -334,15 +361,13 @@
       date: dateStr,
       comment,
       photos: photos.map(p => p.dataUrl),
+      init_data,
     };
 
     try {
       const res = await fetch(CF_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Secret-Token": SECRET,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
@@ -350,7 +375,15 @@
 
       if (res.ok && json.ok) {
         btn.textContent = "✅ Отправлено";
-        if (tg) { tg.close(); } else { showSuccess(`✅ Заявка записана! Строка ${json.row}`); }
+        if (json.photo_error) {
+          showError(`✅ Заявка записана (строка ${json.row}), но фото не отправились в Telegram: ${json.photo_error}`);
+          btn.disabled = false;
+          btn.textContent = "📋 Записать в таблицу";
+        } else if (tg) {
+          tg.close();
+        } else {
+          showSuccess(`✅ Заявка записана! Строка ${json.row}`);
+        }
       } else {
         showError(json.error || "Ошибка сервера");
         btn.disabled = false;
@@ -380,6 +413,10 @@
   function hideMessages() {
     document.getElementById("msg-error").style.display = "none";
     document.getElementById("msg-success").style.display = "none";
+  }
+
+  function showSizeWarning() {
+    showError("Достигнут лимит объёма фото (2.5 МБ). Удалите лишние фото или выберите меньше.");
   }
 </script>
 </body>
