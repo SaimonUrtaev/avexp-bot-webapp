@@ -38,7 +38,7 @@ def _get_sheet():
 def get_row_count() -> int:
     """Возвращает текущее число строк в таблице (включая заголовок)."""
     sheet = _get_sheet()
-    return len(sheet.get_all_values())
+    return len(sheet.col_values(1))
 
 
 def append_loss(data: dict) -> int:
