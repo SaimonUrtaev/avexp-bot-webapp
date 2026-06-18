@@ -114,7 +114,7 @@ def send_text_to_chat(text: str) -> None:
         pass
 
 
-WEBAPP_URL = "https://t.me/AvExp24_bot/newapp"
+WEBAPP_URL = "https://t.me/AvExp24_bot/avexp"
 
 
 def send_button_to_chat() -> None:
@@ -208,6 +208,8 @@ def handler(event, context):
     try:
         body = event.get("body", "{}")
         if isinstance(body, str):
+            if event.get("isBase64Encoded", False):
+                body = base64.b64decode(body).decode("utf-8")
             if len(body) > 3 * 1024 * 1024:
                 return {
                     "statusCode": 413,

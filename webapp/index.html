@@ -248,8 +248,12 @@
     const available = MAX_PHOTOS - photos.length;
     const toAdd = files.slice(0, available);
 
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = true;
+
     for (const file of toAdd) {
       const dataUrl = await compressImage(file);
+      if (!dataUrl) continue;
       if (totalPhotosBytes() + dataUrl.length > MAX_BODY_BYTES) {
         renderPhotos();
         showSizeWarning();
@@ -259,12 +263,14 @@
     }
     renderPhotos();
     e.target.value = "";
+    btn.disabled = false;
   });
 
   function compressImage(file) {
     return new Promise((resolve) => {
       const img = new Image();
       const url = URL.createObjectURL(file);
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
       img.onload = () => {
         const canvas = compressCanvas;
         let w = img.width, h = img.height;
