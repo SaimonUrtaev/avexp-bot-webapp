@@ -380,3 +380,33 @@ def test_response_ok_true_with_photo_error():
     data = json.loads(resp["body"])
     assert data["ok"] is True
     assert data["row"] == 3
+
+
+def test_button_and_photos_sent_even_when_text_notification_fails():
+    """Ошибка текстового уведомления не останавливает отправку кнопки и фото."""
+    call_order = []
+
+    def fake_text(text):
+        raise OSError("telegram timeout")
+
+    def fake_button():
+        call_order.append("button")
+
+    def fake_photos(photos):
+        call_order.append("photos")
+        return []
+
+    sheets_mock.write_row.return_value = 20
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    body = {**VALID_BODY, "photos": [tiny_b64]}
+
+    with mock.patch.object(main, "send_text_to_chat", fake_text), \
+         mock.patch.object(main, "send_button_to_chat", fake_button), \
+         mock.patch.object(main, "send_photos_to_chat", fake_photos):
+        resp = main.handler(make_event(body), {})
+
+    assert "button" in call_order, "кнопка должна быть отправлена даже при ошибке текста"
+    assert "photos" in call_order, "фото должны отправляться даже при ошибке текста"
+    data = json.loads(resp["body"])
+    assert data["ok"] is True
+    assert "notify_error" in data

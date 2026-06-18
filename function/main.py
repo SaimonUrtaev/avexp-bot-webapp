@@ -9,6 +9,8 @@ import urllib.request
 import uuid
 from urllib.parse import parse_qsl
 
+_INTER_BATCH_DELAY = 1.5  # сек между пачками, чтобы не получить 429 от Telegram
+
 from sheets import write_row
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -57,7 +59,7 @@ def _send_single_photo(img_bytes: bytes) -> None:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=25):
+    with urllib.request.urlopen(req, timeout=60):
         pass
 
 
@@ -92,7 +94,7 @@ def _send_media_group(photos_bytes: list) -> None:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=25):
+    with urllib.request.urlopen(req, timeout=90):
         pass
 
 
@@ -178,7 +180,9 @@ def send_photos_to_chat(photos_b64: list) -> list[str]:
         except Exception as e:
             errors.append(str(e))
     else:
-        for i in range(0, len(photos_bytes), 10):
+        for idx, i in enumerate(range(0, len(photos_bytes), 10)):
+            if idx > 0:
+                time.sleep(_INTER_BATCH_DELAY)
             group = photos_bytes[i:i + 10]
             try:
                 if len(group) == 1:
@@ -289,15 +293,12 @@ def handler(event, context):
 
     # Уведомление в Telegram
     photo_errors = []
+    notify_error = None
     if BOT_TOKEN and CHAT_ID:
         try:
             send_text_to_chat(build_notification(row_num, data))
         except Exception as e:
-            return {
-                "statusCode": 200,
-                "headers": {**CORS_HEADERS},
-                "body": json.dumps({"ok": True, "row": row_num, "notify_error": str(e)}, ensure_ascii=False),
-            }
+            notify_error = str(e)  # не прерываем — продолжаем отправлять кнопку и фото
 
         try:
             send_button_to_chat()
@@ -312,18 +313,13 @@ def handler(event, context):
         if photos:
             photo_errors = send_photos_to_chat(photos)
 
+    result = {"ok": True, "row": row_num}
     if photo_errors:
-        return {
-            "statusCode": 200,
-            "headers": {**CORS_HEADERS},
-            "body": json.dumps(
-                {"ok": True, "row": row_num, "photo_error": photo_errors[0]},
-                ensure_ascii=False,
-            ),
-        }
-
+        result["photo_error"] = photo_errors[0]
+    if notify_error:
+        result["notify_error"] = notify_error
     return {
         "statusCode": 200,
         "headers": {**CORS_HEADERS},
-        "body": json.dumps({"ok": True, "row": row_num}, ensure_ascii=False),
+        "body": json.dumps(result, ensure_ascii=False),
     }
