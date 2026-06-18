@@ -53,6 +53,9 @@ async def check_new_rows(context) -> None:
                 reply_markup=group_keyboard(),
             )
             _save_last_row(current)
+        elif current < last:
+            logging.warning(f"Строк в таблице стало меньше ({last}→{current}), сбрасываю позицию")
+            _save_last_row(current)
 
     except Exception as e:
         logging.error(f"check_new_rows error: {type(e).__name__}: {e}")
