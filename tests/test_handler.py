@@ -274,3 +274,109 @@ def test_send_photos_to_chat_continues_after_group_failure():
 
     assert call_count["n"] == 2  # обе группы были попытаны
     assert len(errors) == 1       # одна ошибка от первой группы
+
+
+# ─── Тесты исправлений: фото > 10 и порядок отправки ──────────────────────────
+
+
+def test_11_photos_sends_two_batches():
+    """11 фото → 2 вызова: sendMediaGroup(10) + sendSinglePhoto(1)."""
+    group_calls = []
+    single_calls = []
+
+    def fake_group(group):
+        group_calls.append(len(group))
+
+    def fake_single(img):
+        single_calls.append(1)
+
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    photos = [tiny_b64] * 11
+
+    with mock.patch.object(main, "_send_media_group", fake_group), \
+         mock.patch.object(main, "_send_single_photo", fake_single):
+        errors = main.send_photos_to_chat(photos)
+
+    assert group_calls == [10], "первая группа — ровно 10 фото"
+    assert single_calls == [1],  "одиночный вызов для 11-го фото"
+    assert errors == []
+
+
+def test_10_photos_sends_one_batch():
+    """Ровно 10 фото → только один вызов sendMediaGroup."""
+    group_calls = []
+
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    photos = [tiny_b64] * 10
+
+    with mock.patch.object(main, "_send_media_group", lambda g: group_calls.append(len(g))):
+        errors = main.send_photos_to_chat(photos)
+
+    assert group_calls == [10]
+    assert errors == []
+
+
+def test_button_sent_before_photos():
+    """send_button_to_chat вызывается ДО отправки фото, даже если фото упадут."""
+    call_order = []
+
+    def fake_button():
+        call_order.append("button")
+
+    def fake_photos(photos):
+        call_order.append("photos")
+        return []
+
+    sheets_mock.write_row.return_value = 99
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    body = {**VALID_BODY, "photos": [tiny_b64]}
+
+    with mock.patch.object(main, "send_text_to_chat"), \
+         mock.patch.object(main, "send_button_to_chat", fake_button), \
+         mock.patch.object(main, "send_photos_to_chat", fake_photos):
+        main.handler(make_event(body), {})
+
+    assert call_order.index("button") < call_order.index("photos"), \
+        "кнопка должна отправляться ДО фото"
+
+
+def test_button_sent_even_when_photos_fail():
+    """Если все фото упали — кнопка всё равно отправляется."""
+    button_sent = {"v": False}
+
+    def fake_button():
+        button_sent["v"] = True
+
+    def fake_photos(photos):
+        return ["ошибка загрузки фото"]
+
+    sheets_mock.write_row.return_value = 12
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    body = {**VALID_BODY, "photos": [tiny_b64]}
+
+    with mock.patch.object(main, "send_text_to_chat"), \
+         mock.patch.object(main, "send_button_to_chat", fake_button), \
+         mock.patch.object(main, "send_photos_to_chat", fake_photos):
+        resp = main.handler(make_event(body), {})
+
+    assert button_sent["v"] is True, "кнопка должна быть отправлена"
+    data = json.loads(resp["body"])
+    assert data["ok"] is True
+    assert "photo_error" in data
+
+
+def test_response_ok_true_with_photo_error():
+    """При ошибке фото ответ всё равно ok=True (данные записаны в таблицу)."""
+    sheets_mock.write_row.return_value = 3
+    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+    body = {**VALID_BODY, "photos": [tiny_b64]}
+
+    with mock.patch.object(main, "send_text_to_chat"), \
+         mock.patch.object(main, "send_button_to_chat"), \
+         mock.patch.object(main, "send_photos_to_chat", return_value=["timeout"]):
+        resp = main.handler(make_event(body), {})
+
+    assert resp["statusCode"] == 200
+    data = json.loads(resp["body"])
+    assert data["ok"] is True
+    assert data["row"] == 3
