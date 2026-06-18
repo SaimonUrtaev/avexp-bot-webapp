@@ -292,9 +292,6 @@ def handler(event, context):
         except Exception:
             pass
 
-        # Пауза после текста чтобы не получить 429 перед первой пачкой фото
-        time.sleep(1.0)
-
         # 2. Фото
         photos = data.get("photos", [])
         if not isinstance(photos, list):
@@ -302,6 +299,8 @@ def handler(event, context):
         if len(photos) > 50:
             photos = photos[:50]
         if photos:
+            # Пауза перед первой пачкой чтобы не получить 429 после текста
+            time.sleep(1.0)
             photo_errors = send_photos_to_chat(photos)
 
         # Кнопка "Новая заявка на НЭ" отправляется локальным ботом (bot.py),
