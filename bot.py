@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -46,12 +47,15 @@ async def check_new_rows(context) -> None:
 
         if current > last:
             new_count = current - last
-            logging.info(f"Новых строк: {new_count}, отправляю кнопку в чат")
-            await context.bot.send_message(
-                chat_id=CHAT_ID,
-                text="📋 Новая заявка на НЭ",
-                reply_markup=group_keyboard(),
-            )
+            logging.info(f"Новых строк: {new_count}, отправляю {new_count} кнопку(и) в чат")
+            for i in range(new_count):
+                await context.bot.send_message(
+                    chat_id=CHAT_ID,
+                    text="📋 Новая заявка на НЭ",
+                    reply_markup=group_keyboard(),
+                )
+                if i < new_count - 1:
+                    await asyncio.sleep(1)
             _save_last_row(current)
         elif current < last:
             logging.warning(f"Строк в таблице стало меньше ({last}→{current}), сбрасываю позицию")
