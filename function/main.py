@@ -9,19 +9,19 @@ import urllib.request
 import uuid
 from urllib.parse import parse_qsl
 
-_INTER_BATCH_DELAY = 1.5  # сек между пачками, чтобы не получить 429 от Telegram
-
 from sheets import write_row
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
-SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")  # fallback для тестов / CLI
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Пауза между пачками фото чтобы не получить 429 от Telegram
+_INTER_BATCH_DELAY = 1.5
+
 
 def _verify_init_data(init_data: str, bot_token: str, max_age: int = 3600) -> bool:
-    """Проверяет подпись Telegram WebApp initData через HMAC-SHA256."""
     try:
         params = dict(parse_qsl(init_data, strict_parsing=True))
     except Exception:
@@ -42,42 +42,60 @@ def _verify_init_data(init_data: str, bot_token: str, max_age: int = 3600) -> bo
     return hmac.compare_digest(computed_hash, received_hash)
 
 
-def _send_single_photo(img_bytes: bytes) -> None:
-    """Отправляет одно фото через sendPhoto."""
+def _send_single_photo(img_bytes: bytes, caption: str = None) -> None:
+    """Отправляет одно фото через sendPhoto, опционально с капшном."""
     boundary = uuid.uuid4().hex
-    body = (
+    parts = []
+    parts.append((
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
         f"{CHAT_ID}\r\n"
+    ).encode())
+    if caption:
+        parts.append((
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="caption"\r\n\r\n'
+            f"{caption}\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="parse_mode"\r\n\r\n'
+            f"HTML\r\n"
+        ).encode())
+    parts.append((
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
         f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
+    ).encode())
+    parts.append(img_bytes)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
 
     req = urllib.request.Request(
         f"{TG_API}/sendPhoto",
-        data=body,
+        data=b"".join(parts),
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     with urllib.request.urlopen(req, timeout=60):
         pass
 
 
-def _send_media_group(photos_bytes: list) -> None:
-    """Отправляет группу 2–10 фото через sendMediaGroup (один альбом)."""
+def _send_media_group(photos_bytes: list, caption: str = None) -> None:
+    """Отправляет группу 2–10 фото через sendMediaGroup. Капшн идёт на первое фото."""
     boundary = uuid.uuid4().hex
-    media = [{"type": "photo", "media": f"attach://file_{i}"} for i in range(len(photos_bytes))]
+    media = []
+    for i in range(len(photos_bytes)):
+        item = {"type": "photo", "media": f"attach://file_{i}"}
+        if i == 0 and caption:
+            item["caption"] = caption
+            item["parse_mode"] = "HTML"
+        media.append(item)
 
-    parts = [
-        (
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-            f"{CHAT_ID}\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="media"\r\n\r\n'
-            f"{json.dumps(media, ensure_ascii=False)}\r\n"
-        ).encode()
-    ]
+    parts = [(
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+        f"{CHAT_ID}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="media"\r\n\r\n'
+        f"{json.dumps(media, ensure_ascii=False)}\r\n"
+    ).encode()]
     for i, img_bytes in enumerate(photos_bytes):
         parts.append((
             f"--{boundary}\r\n"
@@ -87,19 +105,18 @@ def _send_media_group(photos_bytes: list) -> None:
         parts.append(img_bytes)
         parts.append(b"\r\n")
     parts.append(f"--{boundary}--\r\n".encode())
-    body = b"".join(parts)
 
     req = urllib.request.Request(
         f"{TG_API}/sendMediaGroup",
-        data=body,
+        data=b"".join(parts),
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     with urllib.request.urlopen(req, timeout=90):
         pass
 
 
-def send_text_to_chat(text: str):
-    """Отправляет текстовое сообщение в Telegram группу."""
+def send_text_to_chat(text: str) -> None:
+    """Отправляет текстовое сообщение (используется только когда нет фото)."""
     payload = json.dumps(
         {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
         ensure_ascii=False,
@@ -109,14 +126,14 @@ def send_text_to_chat(text: str):
         data=payload,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=15):
+    with urllib.request.urlopen(req, timeout=30):
         pass
 
 
 WEBAPP_URL = "https://t.me/AvExp24_bot/newapp"
 
 
-def send_button_to_chat():
+def send_button_to_chat() -> None:
     """Отправляет кнопку 'Новая заявка на НЭ' в группу."""
     payload = json.dumps({
         "chat_id": CHAT_ID,
@@ -133,17 +150,15 @@ def send_button_to_chat():
         data=payload,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=15):
+    with urllib.request.urlopen(req, timeout=30):
         pass
 
 
 def _e(value: str) -> str:
-    """Экранирует HTML-спецсимволы в пользовательском вводе."""
     return html.escape(str(value))
 
 
 def build_notification(row_num: int, data: dict) -> str:
-    """Формирует текст уведомления о заявке НЭ."""
     lines = [f"📋 <b>Заявка НЭ #{row_num}</b>", ""]
     lines.append(f"🏢 <b>Клиент:</b> {_e(data.get('client', '—'))}")
     lines.append(f"🚗 <b>Авто:</b> {_e(data.get('car', '—'))}")
@@ -156,11 +171,9 @@ def build_notification(row_num: int, data: dict) -> str:
     return "\n".join(lines)
 
 
-def send_photos_to_chat(photos_b64: list) -> list[str]:
-    """Отправляет фото группами по 10 через sendMediaGroup. Возвращает список ошибок."""
+def send_photos_to_chat(photos_b64: list, caption: str = None) -> list:
+    """Отправляет фото группами по 10. Капшн ставится на первое фото первой пачки."""
     errors = []
-
-    # Декодируем все фото заранее
     photos_bytes = []
     for b64 in photos_b64:
         if "," in b64:
@@ -173,10 +186,9 @@ def send_photos_to_chat(photos_b64: list) -> list[str]:
     if not photos_bytes:
         return errors
 
-    # 1 фото → sendPhoto; 2+ фото → sendMediaGroup группами по 10
     if len(photos_bytes) == 1:
         try:
-            _send_single_photo(photos_bytes[0])
+            _send_single_photo(photos_bytes[0], caption=caption)
         except Exception as e:
             errors.append(str(e))
     else:
@@ -184,11 +196,12 @@ def send_photos_to_chat(photos_b64: list) -> list[str]:
             if idx > 0:
                 time.sleep(_INTER_BATCH_DELAY)
             group = photos_bytes[i:i + 10]
+            batch_caption = caption if idx == 0 else None
             try:
                 if len(group) == 1:
-                    _send_single_photo(group[0])
+                    _send_single_photo(group[0], caption=batch_caption)
                 else:
-                    _send_media_group(group)
+                    _send_media_group(group, caption=batch_caption)
             except Exception as e:
                 errors.append(str(e))
 
@@ -200,26 +213,19 @@ _CORS_BASE = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
 }
-
-# Для preflight 204 — без Content-Type (нет тела)
 CORS_PREFLIGHT = _CORS_BASE
-
-# Для ответов с JSON-телом
 CORS_HEADERS = {**_CORS_BASE, "Content-Type": "application/json"}
 
 
 def handler(event, context):
-    """Yandex Cloud Function entry point."""
-
-    # CORS preflight — браузер спрашивает разрешение перед реальным запросом
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 204, "headers": {**CORS_PREFLIGHT}, "body": ""}
 
-    # Парсинг тела запроса (до auth — initData лежит в теле)
+    # Парсинг тела
     try:
         body = event.get("body", "{}")
         if isinstance(body, str):
-            if len(body) > 3 * 1024 * 1024:  # 3 МБ — ниже лимита Yandex CF (3.5 МБ)
+            if len(body) > 3 * 1024 * 1024:
                 return {
                     "statusCode": 413,
                     "headers": {**CORS_HEADERS},
@@ -242,8 +248,7 @@ def handler(event, context):
             "body": json.dumps({"error": "Body must be a JSON object"}, ensure_ascii=False),
         }
 
-    # Авторизация: initData от Telegram WebApp (основной путь)
-    # или SECRET_TOKEN в заголовке (fallback для тестов / прямых вызовов)
+    # Авторизация
     headers = event.get("headers", {}) or {}
     init_data = data.pop("init_data", "")
     if init_data:
@@ -291,33 +296,35 @@ def handler(event, context):
             "body": json.dumps({"error": str(e)}, ensure_ascii=False),
         }
 
-    # Уведомление в Telegram
+    # Уведомления в Telegram
     photo_errors = []
-    notify_error = None
     if BOT_TOKEN and CHAT_ID:
-        try:
-            send_text_to_chat(build_notification(row_num, data))
-        except Exception as e:
-            notify_error = str(e)  # не прерываем — продолжаем отправлять кнопку и фото
-
-        try:
-            send_button_to_chat()
-        except Exception:
-            pass  # кнопка не критична — данные уже записаны
-
+        notification_text = build_notification(row_num, data)
         photos = data.get("photos", [])
         if not isinstance(photos, list):
             photos = []
         if len(photos) > 50:
             photos = photos[:50]
+
         if photos:
-            photo_errors = send_photos_to_chat(photos)
+            # Текст идёт капшном на первое фото — отдельное сообщение не нужно
+            photo_errors = send_photos_to_chat(photos, caption=notification_text)
+        else:
+            # Нет фото — шлём текст отдельным сообщением
+            try:
+                send_text_to_chat(notification_text)
+            except Exception:
+                pass
+
+        # Кнопка "Новая заявка" — после фото, пока соединение тёплое
+        try:
+            send_button_to_chat()
+        except Exception:
+            pass
 
     result = {"ok": True, "row": row_num}
     if photo_errors:
         result["photo_error"] = photo_errors[0]
-    if notify_error:
-        result["notify_error"] = notify_error
     return {
         "statusCode": 200,
         "headers": {**CORS_HEADERS},
