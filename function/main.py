@@ -117,7 +117,7 @@ def send_button_to_chat() -> None:
     """Отправляет только кнопку 'Новая заявка на НЭ' без лишнего текста."""
     payload = json.dumps({
         "chat_id": CHAT_ID,
-        "text": "​",  # невидимый символ — Telegram требует текст, но показывать нечего
+        "text": "📋 Новая заявка на НЭ",
         "reply_markup": {
             "inline_keyboard": [[{
                 "text": "📋 Новая заявка на НЭ",
