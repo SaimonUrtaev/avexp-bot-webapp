@@ -12,7 +12,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
-LAST_ROW_FILE = Path("/tmp/avexp_last_row.txt")
+LAST_ROW_FILE = Path(__file__).parent / ".last_row"
 
 
 def group_keyboard() -> InlineKeyboardMarkup:
