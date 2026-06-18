@@ -299,6 +299,11 @@ def handler(event, context):
                 "body": json.dumps({"ok": True, "row": row_num, "notify_error": str(e)}, ensure_ascii=False),
             }
 
+        try:
+            send_button_to_chat()
+        except Exception:
+            pass  # кнопка не критична — данные уже записаны
+
         photos = data.get("photos", [])
         if not isinstance(photos, list):
             photos = []
@@ -306,11 +311,6 @@ def handler(event, context):
             photos = photos[:50]
         if photos:
             photo_errors = send_photos_to_chat(photos)
-
-        try:
-            send_button_to_chat()
-        except Exception:
-            pass  # кнопка не критична — данные уже записаны
 
     if photo_errors:
         return {

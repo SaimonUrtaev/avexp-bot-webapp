@@ -377,12 +377,10 @@
         btn.textContent = "✅ Отправлено";
         if (json.photo_error) {
           showError(`⚠️ Заявка записана (строка ${json.row}), но фото не отправились: ${json.photo_error}`);
-          setTimeout(() => { if (tg) tg.close(); }, 3000);
-        } else if (tg) {
-          tg.close();
         } else {
           showSuccess(`✅ Заявка записана! Строка ${json.row}`);
         }
+        showNewClaimButton();
       } else {
         showError(json.error || "Ошибка сервера");
         btn.disabled = false;
@@ -416,6 +414,27 @@
 
   function showSizeWarning() {
     showError("Достигнут лимит объёма фото (2.5 МБ). Удалите лишние фото или выберите меньше.");
+  }
+
+  function showNewClaimButton() {
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = false;
+    btn.textContent = "➕ Новый убыток";
+    btn.onclick = () => {
+      // Сбрасываем форму
+      document.getElementById("client").value = "";
+      document.getElementById("status_dtp").value = "";
+      document.getElementById("car").value = "";
+      document.getElementById("plate").value = "";
+      document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+      document.getElementById("comment").value = "";
+      photos = [];
+      renderPhotos();
+      hideMessages();
+      btn.textContent = "📋 Записать в таблицу";
+      btn.onclick = submitForm;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
   }
 </script>
 </body>
