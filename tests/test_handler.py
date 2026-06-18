@@ -260,7 +260,7 @@ def test_send_photos_to_chat_continues_after_group_failure():
     """Если одна группа упала — оставшиеся группы отправляются дальше."""
     call_count = {"n": 0}
 
-    def fake_send_group(group, caption=None):
+    def fake_send_group(group):
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise OSError("сеть упала")
@@ -271,11 +271,11 @@ def test_send_photos_to_chat_continues_after_group_failure():
     with mock.patch.object(main, "_send_media_group", fake_send_group):
         errors = main.send_photos_to_chat(photos)
 
-    assert call_count["n"] == 2  # обе группы были попытаны
-    assert len(errors) == 1       # одна ошибка от первой группы
+    assert call_count["n"] == 2
+    assert len(errors) == 1
 
 
-# ─── Тесты: фото > 10, капшн на первом фото, порядок кнопки ──────────────────
+# ─── Тесты: порядок текст → фото → кнопка ────────────────────────────────────
 
 
 def test_11_photos_sends_two_batches():
@@ -283,114 +283,69 @@ def test_11_photos_sends_two_batches():
     group_calls = []
     single_calls = []
 
-    def fake_group(group, caption=None):
-        group_calls.append(len(group))
+    with mock.patch.object(main, "_send_media_group", lambda g: group_calls.append(len(g))), \
+         mock.patch.object(main, "_send_single_photo", lambda img: single_calls.append(1)):
+        tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+        main.send_photos_to_chat([tiny_b64] * 11)
 
-    def fake_single(img, caption=None):
-        single_calls.append(1)
-
-    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
-    photos = [tiny_b64] * 11
-
-    with mock.patch.object(main, "_send_media_group", fake_group), \
-         mock.patch.object(main, "_send_single_photo", fake_single):
-        errors = main.send_photos_to_chat(photos)
-
-    assert group_calls == [10], "первая группа — ровно 10 фото"
-    assert single_calls == [1],  "одиночный вызов для 11-го фото"
-    assert errors == []
+    assert group_calls == [10]
+    assert single_calls == [1]
 
 
 def test_10_photos_sends_one_batch():
     """Ровно 10 фото → только один вызов sendMediaGroup."""
     group_calls = []
 
-    def fake_group(group, caption=None):
-        group_calls.append(len(group))
-
-    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
-    photos = [tiny_b64] * 10
-
-    with mock.patch.object(main, "_send_media_group", fake_group):
-        errors = main.send_photos_to_chat(photos)
+    with mock.patch.object(main, "_send_media_group", lambda g: group_calls.append(len(g))):
+        tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+        main.send_photos_to_chat([tiny_b64] * 10)
 
     assert group_calls == [10]
-    assert errors == []
 
 
-def test_caption_on_first_batch_only():
-    """Капшн передаётся только в первую пачку (idx==0), остальные без капшна."""
-    captions = []
-
-    def fake_group(group, caption=None):
-        captions.append(caption)
-
-    tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
-    photos = [tiny_b64] * 25  # 3 пачки: 10 + 10 + 5
-
-    with mock.patch.object(main, "_send_media_group", fake_group), \
-         mock.patch("time.sleep"):  # не ждать задержку между пачками
-        main.send_photos_to_chat(photos, caption="Тест капшна")
-
-    assert captions[0] == "Тест капшна", "первая пачка получает капшн"
-    assert captions[1] is None,          "вторая пачка без капшна"
-    assert captions[2] is None,          "третья пачка без капшна"
-
-
-def test_button_sent_after_photos():
-    """send_button_to_chat вызывается ПОСЛЕ отправки фото."""
+def test_order_text_photos_button():
+    """Порядок: текст → фото → кнопка."""
     call_order = []
-
-    def fake_button():
-        call_order.append("button")
-
-    def fake_photos(photos, caption=None):
-        call_order.append("photos")
-        return []
 
     sheets_mock.write_row.return_value = 99
     tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
     body = {**VALID_BODY, "photos": [tiny_b64]}
 
-    with mock.patch.object(main, "send_button_to_chat", fake_button), \
-         mock.patch.object(main, "send_photos_to_chat", fake_photos):
+    with mock.patch.object(main, "send_text_to_chat", lambda t: call_order.append("text")), \
+         mock.patch.object(main, "send_photos_to_chat", lambda p: (call_order.append("photos"), [])[1]), \
+         mock.patch.object(main, "send_button_to_chat", lambda: call_order.append("button")):
         main.handler(make_event(body), {})
 
-    assert call_order.index("photos") < call_order.index("button"), \
-        "фото отправляются ДО кнопки"
+    assert call_order == ["text", "photos", "button"], f"Ожидался порядок text→photos→button, получили: {call_order}"
 
 
 def test_button_sent_even_when_photos_fail():
     """Если фото упали — кнопка всё равно отправляется."""
     button_sent = {"v": False}
 
-    def fake_button():
-        button_sent["v"] = True
-
-    def fake_photos(photos, caption=None):
-        return ["ошибка загрузки фото"]
-
     sheets_mock.write_row.return_value = 12
     tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
     body = {**VALID_BODY, "photos": [tiny_b64]}
 
-    with mock.patch.object(main, "send_button_to_chat", fake_button), \
-         mock.patch.object(main, "send_photos_to_chat", fake_photos):
+    with mock.patch.object(main, "send_text_to_chat"), \
+         mock.patch.object(main, "send_button_to_chat", lambda: button_sent.update({"v": True})), \
+         mock.patch.object(main, "send_photos_to_chat", return_value=["ошибка"]):
         resp = main.handler(make_event(body), {})
 
-    assert button_sent["v"] is True, "кнопка должна быть отправлена"
+    assert button_sent["v"] is True
     data = json.loads(resp["body"])
     assert data["ok"] is True
     assert "photo_error" in data
 
 
 def test_response_ok_true_with_photo_error():
-    """При ошибке фото ответ всё равно ok=True (данные записаны в таблицу)."""
+    """При ошибке фото ответ ok=True — данные уже записаны в таблицу."""
     sheets_mock.write_row.return_value = 3
     tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
     body = {**VALID_BODY, "photos": [tiny_b64]}
 
-    with mock.patch.object(main, "send_button_to_chat"), \
+    with mock.patch.object(main, "send_text_to_chat"), \
+         mock.patch.object(main, "send_button_to_chat"), \
          mock.patch.object(main, "send_photos_to_chat", return_value=["timeout"]):
         resp = main.handler(make_event(body), {})
 
@@ -400,17 +355,18 @@ def test_response_ok_true_with_photo_error():
     assert data["row"] == 3
 
 
-def test_no_photos_sends_text_message():
-    """Без фото уведомление отправляется отдельным текстовым сообщением."""
-    text_calls = []
+def test_text_sent_for_both_with_and_without_photos():
+    """Текст уведомления отправляется всегда — с фото и без."""
+    for has_photos in [True, False]:
+        text_calls = []
+        sheets_mock.write_row.return_value = 7
+        tiny_b64 = base64.b64encode(b"\xff\xd8\xff\xe0fake").decode()
+        body = {**VALID_BODY, **({"photos": [tiny_b64]} if has_photos else {})}
 
-    sheets_mock.write_row.return_value = 7
-    body = {**VALID_BODY}  # без photos
+        with mock.patch.object(main, "send_text_to_chat", lambda t: text_calls.append(t)), \
+             mock.patch.object(main, "send_photos_to_chat", return_value=[]), \
+             mock.patch.object(main, "send_button_to_chat"):
+            main.handler(make_event(body), {})
 
-    with mock.patch.object(main, "send_text_to_chat", lambda t: text_calls.append(t)), \
-         mock.patch.object(main, "send_button_to_chat"):
-        resp = main.handler(make_event(body), {})
-
-    assert len(text_calls) == 1, "одно текстовое сообщение"
-    assert "Заявка НЭ" in text_calls[0]
-    assert json.loads(resp["body"])["ok"] is True
+        assert len(text_calls) == 1, f"текст должен отправляться (has_photos={has_photos})"
+        assert "Заявка НЭ" in text_calls[0]

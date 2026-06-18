@@ -42,51 +42,31 @@ def _verify_init_data(init_data: str, bot_token: str, max_age: int = 3600) -> bo
     return hmac.compare_digest(computed_hash, received_hash)
 
 
-def _send_single_photo(img_bytes: bytes, caption: str = None) -> None:
-    """Отправляет одно фото через sendPhoto, опционально с капшном."""
+def _send_single_photo(img_bytes: bytes) -> None:
+    """Отправляет одно фото через sendPhoto."""
     boundary = uuid.uuid4().hex
-    parts = []
-    parts.append((
+    body = (
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
         f"{CHAT_ID}\r\n"
-    ).encode())
-    if caption:
-        parts.append((
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="caption"\r\n\r\n'
-            f"{caption}\r\n"
-            f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="parse_mode"\r\n\r\n'
-            f"HTML\r\n"
-        ).encode())
-    parts.append((
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="photo"; filename="photo.jpg"\r\n'
         f"Content-Type: image/jpeg\r\n\r\n"
-    ).encode())
-    parts.append(img_bytes)
-    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    ).encode() + img_bytes + f"\r\n--{boundary}--\r\n".encode()
 
     req = urllib.request.Request(
         f"{TG_API}/sendPhoto",
-        data=b"".join(parts),
+        data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     with urllib.request.urlopen(req, timeout=60):
         pass
 
 
-def _send_media_group(photos_bytes: list, caption: str = None) -> None:
-    """Отправляет группу 2–10 фото через sendMediaGroup. Капшн идёт на первое фото."""
+def _send_media_group(photos_bytes: list) -> None:
+    """Отправляет группу 2–10 фото через sendMediaGroup."""
     boundary = uuid.uuid4().hex
-    media = []
-    for i in range(len(photos_bytes)):
-        item = {"type": "photo", "media": f"attach://file_{i}"}
-        if i == 0 and caption:
-            item["caption"] = caption
-            item["parse_mode"] = "HTML"
-        media.append(item)
+    media = [{"type": "photo", "media": f"attach://file_{i}"} for i in range(len(photos_bytes))]
 
     parts = [(
         f"--{boundary}\r\n"
@@ -134,10 +114,10 @@ WEBAPP_URL = "https://t.me/AvExp24_bot/newapp"
 
 
 def send_button_to_chat() -> None:
-    """Отправляет кнопку 'Новая заявка на НЭ' в группу."""
+    """Отправляет только кнопку 'Новая заявка на НЭ' без лишнего текста."""
     payload = json.dumps({
         "chat_id": CHAT_ID,
-        "text": "➕ Новая заявка",
+        "text": "​",  # невидимый символ — Telegram требует текст, но показывать нечего
         "reply_markup": {
             "inline_keyboard": [[{
                 "text": "📋 Новая заявка на НЭ",
@@ -171,8 +151,8 @@ def build_notification(row_num: int, data: dict) -> str:
     return "\n".join(lines)
 
 
-def send_photos_to_chat(photos_b64: list, caption: str = None) -> list:
-    """Отправляет фото группами по 10. Капшн ставится на первое фото первой пачки."""
+def send_photos_to_chat(photos_b64: list) -> list:
+    """Отправляет фото группами по 10."""
     errors = []
     photos_bytes = []
     for b64 in photos_b64:
@@ -188,7 +168,7 @@ def send_photos_to_chat(photos_b64: list, caption: str = None) -> list:
 
     if len(photos_bytes) == 1:
         try:
-            _send_single_photo(photos_bytes[0], caption=caption)
+            _send_single_photo(photos_bytes[0])
         except Exception as e:
             errors.append(str(e))
     else:
@@ -196,12 +176,11 @@ def send_photos_to_chat(photos_b64: list, caption: str = None) -> list:
             if idx > 0:
                 time.sleep(_INTER_BATCH_DELAY)
             group = photos_bytes[i:i + 10]
-            batch_caption = caption if idx == 0 else None
             try:
                 if len(group) == 1:
-                    _send_single_photo(group[0], caption=batch_caption)
+                    _send_single_photo(group[0])
                 else:
-                    _send_media_group(group, caption=batch_caption)
+                    _send_media_group(group)
             except Exception as e:
                 errors.append(str(e))
 
@@ -296,27 +275,27 @@ def handler(event, context):
             "body": json.dumps({"error": str(e)}, ensure_ascii=False),
         }
 
-    # Уведомления в Telegram
+    # Уведомления в Telegram: текст → фото → кнопка
     photo_errors = []
     if BOT_TOKEN and CHAT_ID:
         notification_text = build_notification(row_num, data)
+
+        # 1. Текст — первым отдельным сообщением
+        try:
+            send_text_to_chat(notification_text)
+        except Exception:
+            pass
+
+        # 2. Фото
         photos = data.get("photos", [])
         if not isinstance(photos, list):
             photos = []
         if len(photos) > 50:
             photos = photos[:50]
-
         if photos:
-            # Текст идёт капшном на первое фото — отдельное сообщение не нужно
-            photo_errors = send_photos_to_chat(photos, caption=notification_text)
-        else:
-            # Нет фото — шлём текст отдельным сообщением
-            try:
-                send_text_to_chat(notification_text)
-            except Exception:
-                pass
+            photo_errors = send_photos_to_chat(photos)
 
-        # Кнопка "Новая заявка" — после фото, пока соединение тёплое
+        # 3. Кнопка "Новая заявка на НЭ" — последней
         try:
             send_button_to_chat()
         except Exception:
