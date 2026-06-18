@@ -3,11 +3,15 @@ import hashlib
 import hmac
 import html
 import json
+import logging
 import os
 import time
 import urllib.request
 import uuid
 from urllib.parse import parse_qsl
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from sheets import write_row
 
@@ -295,11 +299,8 @@ def handler(event, context):
         if photos:
             photo_errors = send_photos_to_chat(photos)
 
-        # 3. Кнопка "Новая заявка на НЭ" — последней
-        try:
-            send_button_to_chat()
-        except Exception:
-            pass
+        # Кнопка "Новая заявка на НЭ" отправляется локальным ботом (bot.py),
+        # который следит за новыми строками в таблице — надёжнее чем из YC
 
     result = {"ok": True, "row": row_num}
     if photo_errors:

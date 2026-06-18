@@ -35,6 +35,12 @@ def _get_sheet():
     return sheet
 
 
+def get_row_count() -> int:
+    """Возвращает текущее число строк в таблице (включая заголовок)."""
+    sheet = _get_sheet()
+    return len(sheet.get_all_values())
+
+
 def append_loss(data: dict) -> int:
     """
     Записать новый убыток в таблицу.
