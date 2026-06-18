@@ -22,7 +22,7 @@ SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # Пауза между пачками фото чтобы не получить 429 от Telegram
-_INTER_BATCH_DELAY = 1.5
+_INTER_BATCH_DELAY = 2.0
 
 
 def _verify_init_data(init_data: str, bot_token: str, max_age: int = 3600) -> bool:
@@ -63,7 +63,7 @@ def _send_single_photo(img_bytes: bytes) -> None:
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=60):
+    with urllib.request.urlopen(req, timeout=30):
         pass
 
 
@@ -95,7 +95,7 @@ def _send_media_group(photos_bytes: list) -> None:
         data=b"".join(parts),
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=90):
+    with urllib.request.urlopen(req, timeout=25):
         pass
 
 
@@ -291,6 +291,9 @@ def handler(event, context):
             send_text_to_chat(notification_text)
         except Exception:
             pass
+
+        # Пауза после текста чтобы не получить 429 перед первой пачкой фото
+        time.sleep(1.0)
 
         # 2. Фото
         photos = data.get("photos", [])
